@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "leitura_arquivos.h"
 #include "escrita_arquivo.h"
 #include "deletar_arquivo.h"
@@ -5,6 +9,10 @@
 #include "carregar_SA.h"
 #include "formatar.h"
 
+char nome_arquivo[256];
+boot_record br_sistema;
+entrada *entrada_sistema = NULL;
+bloco *dados_sistema = NULL;
 
 void listar_arquivos() {
     // Função responsável por listar todos os arquivos presentes no sistema de arquivos.

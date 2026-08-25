@@ -91,7 +91,7 @@ int formatar(){
     br_sistema.bytes_por_bloco = BLOCK_SIZE;     // Quantidade fixa de blocos por byte.
     br_sistema.blocos_reservados = 1;            // Quantidade de blocos reservados: 1 (boot record) (adicionar mais 1? root dir?)
     br_sistema.quant_entradas_sistema = 0;       // inicia em 0 porque o sistema está vazio
-    br_sistema.foo = 1;                          // Numero de blocos reservados para o root directory
+    br_sistema.num_blocos_diretorio_raiz = 1;     // Numero de blocos reservados para o diretorio raiz
     br_sistema.num_blocos_totais = tamanho_disco/br_sistema.bytes_por_bloco;  // separamos o disco em blocos
 
     tamanho_total_entradas = n_entradas * sizeof(entrada);          // tamanho total da tabela de entradas em bytes
