@@ -1,5 +1,5 @@
-.src\output\*
-.src\output\**\*
-.src\vscode
-.src\vscode\*
-.src\SO - contigua_listaligada(4).pdf
+./src/output/*
+./src/output/**/*
+./src/vscode
+./src/vscode/*
+.src/SO - contigua_listaligada(4).pdf
