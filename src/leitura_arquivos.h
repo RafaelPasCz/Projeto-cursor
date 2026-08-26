@@ -1,243 +1,298 @@
-// Funções envolvidas no processo de cópia de arquivos do Disco para o Sistema de Arquivos
+/* Funcoes para copiar um arquivo do disco para a particao simulada. */
+#ifndef LEITURA_ARQUIVOS_H
+#define LEITURA_ARQUIVOS_H
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "structs.h"
-#include "strings.h"
 
+typedef struct {
+    uint32_t primeiro_bloco;
+    uint32_t bloco_anterior;
+    uint32_t proximo_bloco;
+    uint32_t quantidade_blocos;
+} alocacao_contigua;
 
-int procurar_espaco_livre(uint32_t tamanho_blocos){
-    //  Recebe o tamanho (em blocos) da sequência contígua de blocos a ser armazenado na seção de dados
-    //  Ontem o ponteiro do começo da seção de dados.
-    //  Caminha pela lista de blocos livres de seção de dados
-        //  Em busca de um conjunto contíguo de blocos de tamanho suficiente para armazenar o arquivo requisitado 
-    //  Se encontrar um conjunto contíguo de blocos suficiente:
-        //  Reconecta os ponteiros da lista
-        //  Faz alguns tratamentos de dados
-    
-    // Retorna o ponteiro para o primeiro bloco da nossa sequência
-    // Retorna -1 se não houver espaço livre contíguo o suficiente
-
-    //int blocos_dados = br_sistema.num_blocos_secao_dados;   // Tamanho em blocos da seção de dados
-
-    printf("\naq1");
-
-    uint32_t cabeca_lista = br_sistema.cabeca_lista;        // Primeiro bloco livre
-    uint32_t sequencia = 1;                                 // Contador que armazena a sequência atual de blocos livres contíguos
-    printf("\naq2");
-    int offset = 1 + br_sistema.num_blocos_tabela_entradas; // Offset a ser utilizado quando formos acessar o vetor dados_sistema[]
-    printf("\naq3");
-    uint32_t ptr_bloco = cabeca_lista;                      // Armazena o bloco sendo analizado atualmente
-    uint32_t ptr_inicio_atual = cabeca_lista;               // Armazena o começo do conjunto contíguo de blocos atual 
-    uint32_t ptr_fim_anterior = cabeca_lista;               // Armazena o final do conjunto contíguo de blocos anterior
-    uint32_t ptr = 0;                                       // Usado em comparações
-    printf("\naq4");
-    // dados_sistema[]
-
-    // Primeiro, checamos se o sistema tem blocos livres suficientes para armazenar o arquivo
-    if (br_sistema.num_blocos_livres < tamanho_blocos){ // Se a qtd de blocos requisitados for maior que a qtd de blocos livres, erro
-        printf("\naq5");
-        printf("\nERRO: Sistema não há blocos livres o suficiente! Nem se o sistema for desfragmentado.");
-        return -1;
-    }
-    printf("\naq6");
-    printf("\nCabecalista eh %i", ptr_bloco);
-    printf("\nOffset eh %i", offset);
-
-    printf("\n1 eh %i", dados_sistema[ptr_bloco - offset].conteudo[1]);
-    printf("\n2 eh %i", dados_sistema[ptr_bloco - offset].conteudo[2]);
-    printf("\n3 eh %i", dados_sistema[ptr_bloco - offset].conteudo[3]);
-    printf("\n4 eh %i", dados_sistema[ptr_bloco - offset].conteudo[4]);
-
-    for (int i = 0; i < 4; i++) {           // Pegamos o ponteiro armazenado pela cabeça da lista. Isso estava aqui antes?
-        ptr |= ((uint32_t)(uint8_t)dados_sistema[ptr_bloco - offset].conteudo[i]) << (i * 8);
-    }
-
-    //memcpy(&ptr, dados_sistema[ptr_bloco - offset].conteudo, sizeof(uint32_t));
-
-    printf("\n ptr eh %i", ptr);
-
-    printf("\n1");
-
-    // Agora, caminhamos pela lista de blocos livres
-    while(ptr_bloco != 0xFFFFFFFF){         // Percorremos a lista até chegar no último bloco livre.
-        printf("\n2");
-        // Primeiro vemos se nós já encontramos uma sequência de blocos contíguos grande o suficiente.
-        if(sequencia == tamanho_blocos){
-            printf("\n3");
-            break;                          // Encontramos nossa sequência de blocos contíguos! Saímos do loop
-        }
-        // Pegamos os 4 primeiros bytes do bloco atual, para obter o ponteiro para o próximo bloco
-        ptr = 0;
-        for (int i = 0; i < 4; i++) {
-            printf("\n4");
-            ptr |= ((uint32_t)(uint8_t)dados_sistema[ptr_bloco - offset].conteudo[i]) << (i * 8);
-        }
-        printf("\n5");
-
-        // Seguimos para o próximo bloco
-        if(ptr == (ptr_bloco + 1)){         // Se o próximo bloco livre está grudado no bloco atual...
-            printf("\n6");
-            ptr_bloco = ptr;                // Avançamos para o próximo bloco
-            sequencia = sequencia + 1;      // Aumentamos em 1 a sequência
-        
-        }else{                              // Se não...
-            printf("\n7");
-            ptr_fim_anterior = ptr_bloco;   // Armazenamos o final do conjunto contíguo de blocos anterior
-            ptr_inicio_atual = ptr;         // Armazenamos o começo da próxima sequência de blocos contígua
-            ptr_bloco  = ptr;               // Avançaos para o próximo bloco
-            sequencia  = 1;                 // Reiniciamos o contador de sequência
-        }
-        printf("\n8");
-        printf("\nCabeca: %i, sequencia: %i, ptr: %i, ptr_bloco: %i", cabeca_lista, sequencia, ptr, ptr_bloco);
-    }
-
-    printf("\n9");
-    if(sequencia != tamanho_blocos){        // Se não tivermos encontrado uma sequência contígua de blocos livres...
-        printf("\n\n+++_---------- Não foi encontrada uma sequência contígua de blocos livres! Mas você pode tentar desfragmentar o disco!");
-        return -1;
-    }
-
-
-    // Agora, temos:
-        //  ptr_inicio_atual: o primeiro bloco da nossa sequência contígua de blocos
-        //  ptr_bloco       : o último bloco da nossa sequência contígua de blocos
-        //  ptr_fim_anterior: o último bloco da sequência anterior de blocos
-        //  ptr             : bloco livre que vem depois da nossa sequência contígua de blocos
-
-
-    // Então, agora vamos religar os ponteiros
-    if(ptr_fim_anterior == cabeca_lista){   // Se o arquivo vai ser alocado no lugar que era a cabeça da lista de blocos livres...
-        printf("\n10");
-        printf("\nArquivo vai ser alocado na cabeca da lista! cabeca eh: %i, ptr eh %i", cabeca_lista, ptr);
-        br_sistema.cabeca_lista = ptr;      // A cabeça passa a apontar para o mesmo local que o final da nossa sequência apontava
-    
-    }else{                                  // Se não...
-        printf("\n11");
-        memcpy(dados_sistema[ptr_fim_anterior - offset].conteudo, &ptr, sizeof(uint32_t));
-        // Fazemos o final da sequênca anterior apontar para o mesmo local que o final da nossa sequência apontava
-    }
-
-    uint32_t zero = 0;  // Também apagamos o ponteiro armazenado no último bloco, para caso ele não ser totalmente sobrescrito depois
-    memcpy(dados_sistema[ptr_bloco - offset].conteudo, &zero, sizeof(uint32_t));    
-    printf("\n12");
-    br_sistema.num_blocos_livres = br_sistema.num_blocos_livres - tamanho_blocos;   // Reduzimos o tamanho de blocos livres no sistema
-
-    return ptr_inicio_atual;                // E por fim retornamos o começo da nossa sequência contígua de blocos livres!
+static int bloco_de_dados_valido(uint32_t numero_bloco) {
+    return numero_bloco >= br_sistema.blocos_reservados &&
+           numero_bloco < br_sistema.num_blocos_totais;
 }
 
+static uint32_t ler_proximo_bloco_livre(uint32_t numero_bloco) {
+    const uint8_t *conteudo;
 
-int escrever_conteudo(uint32_t tamanho_blocos, char* arquivo) {
-    //  Recebe o tamanho de blocos a serem reservados, e o nome de um arquivo de origem.
-    //  Chama a função de procurar por um espaço contíguo livre na lista de blocos livres
-        //  Essa função reordena a lista de blocos livres, e retorna o endereço do primeiro bloco livre
-    //  Escrevemos o arquivo diretamente na lista dados_sistema 
-    //  Retorna o endereço do primeiro bloco escrito
-
-    
-    FILE *file_src = fopen(arquivo, "rb");
-    if (!file_src) {
-        perror("Erro ao abrir arquivo de origem");
-        return -1;
-    }
-    
-    int offset = 1 + br_sistema.num_blocos_tabela_entradas; // Offset a ser utilizado quando formos acessar o vetor dados_sistema[]
-    printf("\nVai busca espaco livre");
-    int inicio = procurar_espaco_livre(tamanho_blocos);
-    printf("\nVolta busca espaco livre");
-    if (inicio == -1){
-        printf("\nEspaco insuficiente, Abortando operacao...\n");
-        fclose(file_src);
-        return -1;
-    }
-    
-    printf("\nEspaco livre suficiente encontrado, na posicao %i", inicio);
-    
-
-    // Agora, é só ler diretamente o conteúdo do arquivo a partir da posição equivalente do array
-        // (malloc alocou o array de forma contígua, então isso funciona)
-    int retorno = fread(&dados_sistema[inicio - offset].conteudo, (tamanho_blocos * BLOCK_SIZE), 1, file_src);
-    
-    printf("\n\n O Retorno de fread foi: %i", retorno);
-
-
-    // É para o arquivo agora estar armazenado na seção de dados do Sistema de Arquivos (em memória)
-    // Só falta atualizar a tabela de entradas
-    return inicio;
+    conteudo = dados_sistema[numero_bloco - br_sistema.blocos_reservados].conteudo;
+    return (uint32_t)conteudo[0] |
+           ((uint32_t)conteudo[1] << 8) |
+           ((uint32_t)conteudo[2] << 16) |
+           ((uint32_t)conteudo[3] << 24);
 }
 
+static void escrever_proximo_bloco_livre(uint32_t numero_bloco,
+                                          uint32_t proximo_bloco) {
+    uint8_t *conteudo;
 
-int escrever_entrada(char* arquivo) {
-    // Recebe o nome de um arquivo, abre ele
-    // Caminha pela tabela de entradas, procura por uma entrada livre
-    // Caminha pela lista de blocos livres, procura por um espaço contíguo grande o suficiente para armazenar o arquivo
-    // Armazena o arquivo, adiciona ele na tabela de entradas
-    // Atualiza o boot record
-    // Retorna
+    conteudo = dados_sistema[numero_bloco - br_sistema.blocos_reservados].conteudo;
+    conteudo[0] = (uint8_t)(proximo_bloco & UINT32_C(0xFF));
+    conteudo[1] = (uint8_t)((proximo_bloco >> 8) & UINT32_C(0xFF));
+    conteudo[2] = (uint8_t)((proximo_bloco >> 16) & UINT32_C(0xFF));
+    conteudo[3] = (uint8_t)((proximo_bloco >> 24) & UINT32_C(0xFF));
+}
 
-    // Primeiro, procuramos o primeiro espaço livre na tabela de entradas
-    int entrada_livre = -1;
-    int blocos_tabela = br_sistema.num_blocos_tabela_entradas;      // Obtém o número de blocos da tabela de enradas
-    int tamanho_t = blocos_tabela * 16;                             // Calcula o número de entradas possíveis na tabela
-    
-    for (int i = 0; i < tamanho_t; i++) {                           // Caminhamos pela tabela de entradas, em busca de uma entrada disponível
-        if (entrada_sistema[i].status == 0x00 || entrada_sistema[i].status == 0xE5) {
-            entrada_livre = i;
-            printf("Entrada livre encontrada");
+/*
+ * Percorre a lista livre no disco e procura uma sequencia de blocos com
+ * enderecos consecutivos. O limite de iteracoes impede loops infinitos caso
+ * a lista esteja corrompida. Esta funcao nao altera a lista.
+ */
+static int encontrar_espaco_contiguo(uint32_t quantidade_blocos,
+                                     alocacao_contigua *resultado) {
+    uint32_t atual;
+    uint32_t anterior = BLOCO_INVALIDO;
+    uint32_t anterior_na_sequencia = BLOCO_INVALIDO;
+    uint32_t inicio_sequencia = BLOCO_INVALIDO;
+    uint32_t ultimo_sequencia = BLOCO_INVALIDO;
+    uint32_t tamanho_sequencia = 0;
+
+    if (quantidade_blocos == 0 || dados_sistema == NULL ||
+        br_sistema.num_blocos_livres < quantidade_blocos ||
+        br_sistema.cabeca_lista == BLOCO_INVALIDO) {
+        return 0;
+    }
+
+    atual = br_sistema.cabeca_lista;
+    for (uint32_t visitados = 0;
+         visitados < br_sistema.num_blocos_livres;
+         visitados++) {
+        uint32_t proximo;
+
+        if (!bloco_de_dados_valido(atual)) {
+            return 0;
+        }
+
+        proximo = ler_proximo_bloco_livre(atual);
+        if (proximo != BLOCO_INVALIDO && !bloco_de_dados_valido(proximo)) {
+            return 0;
+        }
+
+        if (tamanho_sequencia == 0 || atual != ultimo_sequencia + 1u) {
+            inicio_sequencia = atual;
+            anterior_na_sequencia = anterior;
+            tamanho_sequencia = 1;
+        } else {
+            tamanho_sequencia++;
+        }
+        ultimo_sequencia = atual;
+
+        if (tamanho_sequencia == quantidade_blocos) {
+            resultado->primeiro_bloco = inicio_sequencia;
+            resultado->bloco_anterior = anterior_na_sequencia;
+            resultado->proximo_bloco = proximo;
+            resultado->quantidade_blocos = quantidade_blocos;
+            return 1;
+        }
+
+        if (proximo == BLOCO_INVALIDO) {
             break;
         }
+
+        anterior = atual;
+        atual = proximo;
     }
-    
-    if (entrada_livre == -1) {                                      // Se a tabela estiver cheia...
-        printf("Nenhuma entrada livre.\n");
-        return 1;
-    }
-
-    // Abre o arquivo a ser copiado
-    FILE *file_src = fopen(arquivo, "rb");                          // Abrimos o arquivo a ser copiado
-    if (!file_src) {
-        perror("Erro ao abrir arquivo de origem");
-        return 1;
-    }
-
-    printf("\n1");
-    
-    fseek(file_src, 0, SEEK_END);                                   // Calcula tamanho do arquivo a ser copiado                  
-    long tamanho = ftell(file_src);                                 // Tamanho em bytes
-    fclose(file_src);
-
-    uint32_t tamanho_blocos = (tamanho + BLOCK_SIZE - 1) / BLOCK_SIZE;  // Usamos o mesmo esquema do boot record para ter sobra
-
-    printf("\nVai pra");
-
-    // Escreve o conteúdo no arquivo, e obtém o primeiro bloco
-    int primeiro_bloco = escrever_conteudo(tamanho_blocos, arquivo); // Escreve o conteúdo, retorna o primeiro bloco aonde foi escrito
-    if (primeiro_bloco == -1) {
-        return 1;                                                    // -1: erro na escrita
-    }
-
-    printf("\nvoltou de escrever_conteudo");
-
-    char nome[100] = {0}, extensao[100] = {0}, resultado[100] = {0};// Tratamos o nome do arquivo
-    separar_nome_extensao(arquivo, nome, extensao);                 // Separa o nome do arquivo da extensão
-    concatenar_nome_extensao(nome, extensao, resultado);            // Concatena os dois
-
-    memset(&entrada_sistema[entrada_livre], 0, sizeof(entrada));    // Enchemos o espaço da memória de zeros, para o remoto caso de ter lixo
-    
-    // Dai por fim, preenchemos a tabela de entradas
-    entrada_sistema[entrada_livre].status = 0x01;                   // Preenchemos o status da nova entrada
-    memcpy(entrada_sistema[entrada_livre].nome, resultado, 12);     // Nome do arquivo
-    memcpy(entrada_sistema[entrada_livre].ext,  extensao,  4);      // Extensão (até 4 caracteres)
-
-    entrada_sistema[entrada_livre].tipo = 0x01;                     // Tipo (0x01 é arquivo)
-    entrada_sistema[entrada_livre].primeiro_bloco = primeiro_bloco; // Ponteiro para o primeiro bloco alocado
-    entrada_sistema[entrada_livre].tamanho = tamanho;               // Tamanho do arquivo em bytes
-    entrada_sistema[entrada_livre].numero_blocos_usados = tamanho_blocos;   // Tamanho do arquivo em blocos
-    entrada_sistema[entrada_livre].padding = 0;                     // Padding, coiso extra pra completar os 32 bytes
-
-    br_sistema.quant_entradas_sistema++;                            // Aumentamos o contador de arquivos salvados no bot record                 
-
-    //strncpy(entrada_sistema[entrada_livre].nome, resultado, 12);    
-    //strncpy(entrada_sistema[entrada_livre].ext, extensao, 4);
 
     return 0;
 }
 
+static void reservar_espaco_contiguo(const alocacao_contigua *alocacao) {
+    if (alocacao->bloco_anterior == BLOCO_INVALIDO) {
+        br_sistema.cabeca_lista = alocacao->proximo_bloco;
+    } else {
+        escrever_proximo_bloco_livre(alocacao->bloco_anterior,
+                                     alocacao->proximo_bloco);
+    }
+
+    br_sistema.num_blocos_livres -= alocacao->quantidade_blocos;
+}
+
+static int obter_tamanho_arquivo(const char *caminho, uint32_t *tamanho) {
+    FILE *arquivo;
+    long tamanho_lido;
+
+    arquivo = fopen(caminho, "rb");
+    if (arquivo == NULL) {
+        perror("Erro ao abrir o arquivo de origem");
+        return 0;
+    }
+
+    if (fseek(arquivo, 0L, SEEK_END) != 0 ||
+        (tamanho_lido = ftell(arquivo)) < 0 ||
+        (uintmax_t)tamanho_lido > UINT32_MAX) {
+        fprintf(stderr, "Nao foi possivel obter um tamanho de arquivo valido.\n");
+        fclose(arquivo);
+        return 0;
+    }
+    fclose(arquivo);
+
+    *tamanho = (uint32_t)tamanho_lido;
+    return 1;
+}
+
+static int copiar_conteudo_para_particao(const char *caminho,
+                                         uint32_t tamanho_arquivo,
+                                         uint32_t quantidade_blocos,
+                                         uint32_t *primeiro_bloco) {
+    FILE *arquivo;
+    uint8_t *conteudo;
+    alocacao_contigua alocacao;
+    int leitura_completa;
+
+    conteudo = malloc(tamanho_arquivo);
+    if (conteudo == NULL) {
+        fprintf(stderr, "Erro ao alocar memoria para o arquivo de origem.\n");
+        return 0;
+    }
+
+    arquivo = fopen(caminho, "rb");
+    if (arquivo == NULL) {
+        perror("Erro ao abrir o arquivo de origem");
+        free(conteudo);
+        return 0;
+    }
+
+    leitura_completa = fread(conteudo, 1, tamanho_arquivo, arquivo) == tamanho_arquivo;
+    if (fclose(arquivo) != 0 || !leitura_completa) {
+        fprintf(stderr, "Erro ao ler o arquivo de origem.\n");
+        free(conteudo);
+        return 0;
+    }
+
+    if (!encontrar_espaco_contiguo(quantidade_blocos, &alocacao)) {
+        fprintf(stderr, "Nao existe espaco livre contiguo suficiente.\n");
+        free(conteudo);
+        return 0;
+    }
+
+    /* O vetor de blocos e contiguo em memoria, assim como a alocacao encontrada. */
+    {
+        uint8_t *destino = (uint8_t *)dados_sistema +
+            (size_t)(alocacao.primeiro_bloco - br_sistema.blocos_reservados) * BLOCK_SIZE;
+
+        memset(destino, 0, (size_t)alocacao.quantidade_blocos * BLOCK_SIZE);
+        memcpy(destino, conteudo, tamanho_arquivo);
+    }
+    free(conteudo);
+
+    reservar_espaco_contiguo(&alocacao);
+    *primeiro_bloco = alocacao.primeiro_bloco;
+    return 1;
+}
+
+static void preencher_nome_entrada(entrada *destino, const char *caminho) {
+    const char *nome_base = caminho;
+    const char *ultima_barra = strrchr(caminho, '/');
+    const char *ultima_barra_invertida = strrchr(caminho, '\\');
+    const char *ponto;
+    size_t tamanho_nome;
+
+    if (ultima_barra != NULL && ultima_barra + 1 > nome_base) {
+        nome_base = ultima_barra + 1;
+    }
+    if (ultima_barra_invertida != NULL && ultima_barra_invertida + 1 > nome_base) {
+        nome_base = ultima_barra_invertida + 1;
+    }
+
+    ponto = strrchr(nome_base, '.');
+    if (ponto == nome_base) {
+        ponto = NULL;
+    }
+
+    tamanho_nome = ponto == NULL ? strlen(nome_base) : (size_t)(ponto - nome_base);
+    if (tamanho_nome > NOME_TAMANHO) {
+        tamanho_nome = NOME_TAMANHO;
+    }
+    memcpy(destino->nome, nome_base, tamanho_nome);
+
+    if (ponto != NULL) {
+        size_t tamanho_extensao = strlen(ponto + 1);
+        if (tamanho_extensao > EXTENSAO_TAMANHO) {
+            tamanho_extensao = EXTENSAO_TAMANHO;
+        }
+        memcpy(destino->ext, ponto + 1, tamanho_extensao);
+    }
+}
+
+int escrever_entrada(char *caminho) {
+    uint32_t tamanho_arquivo;
+    uint32_t quantidade_blocos;
+    uint32_t primeiro_bloco;
+    uint32_t capacidade_tabela;
+    uint32_t indice_entrada;
+
+    if (caminho == NULL || entrada_sistema == NULL || dados_sistema == NULL ||
+        br_sistema.bytes_por_bloco != BLOCK_SIZE) {
+        fprintf(stderr, "Carregue uma particao valida antes de copiar arquivos.\n");
+        return 1;
+    }
+
+    if (br_sistema.num_blocos_tabela_entradas >
+        UINT32_MAX / ENTRADAS_POR_BLOCO) {
+        fprintf(stderr, "Tabela de entradas invalida.\n");
+        return 1;
+    }
+    capacidade_tabela = br_sistema.num_blocos_tabela_entradas * ENTRADAS_POR_BLOCO;
+    for (indice_entrada = 0; indice_entrada < capacidade_tabela; indice_entrada++) {
+        if (entrada_sistema[indice_entrada].status == STATUS_ENTRADA_LIVRE ||
+            entrada_sistema[indice_entrada].status == STATUS_ENTRADA_REMOVIDA) {
+            break;
+        }
+    }
+    if (indice_entrada == capacidade_tabela) {
+        fprintf(stderr, "Nenhuma entrada livre na tabela.\n");
+        return 1;
+    }
+
+    if (!obter_tamanho_arquivo(caminho, &tamanho_arquivo)) {
+        return 1;
+    }
+    if (tamanho_arquivo == 0) {
+        fprintf(stderr, "Arquivos vazios ainda nao sao suportados.\n");
+        return 1;
+    }
+
+    quantidade_blocos = tamanho_arquivo / BLOCK_SIZE;
+    if (tamanho_arquivo % BLOCK_SIZE != 0) {
+        quantidade_blocos++;
+    }
+    if (quantidade_blocos > SIZE_MAX / BLOCK_SIZE) {
+        fprintf(stderr, "Arquivo grande demais para esta plataforma.\n");
+        return 1;
+    }
+    if (!copiar_conteudo_para_particao(caminho, tamanho_arquivo,
+                                       quantidade_blocos, &primeiro_bloco)) {
+        return 1;
+    }
+
+    {
+        uint8_t status_anterior = entrada_sistema[indice_entrada].status;
+        entrada nova_entrada = {0};
+
+        nova_entrada.status = TIPO_ENTRADA_ARQUIVO;
+        nova_entrada.tipo = TIPO_ENTRADA_ARQUIVO;
+        nova_entrada.primeiro_bloco = primeiro_bloco;
+        nova_entrada.tamanho = tamanho_arquivo;
+        nova_entrada.numero_blocos_usados = quantidade_blocos;
+        preencher_nome_entrada(&nova_entrada, caminho);
+        entrada_sistema[indice_entrada] = nova_entrada;
+
+        if (status_anterior == STATUS_ENTRADA_LIVRE) {
+            br_sistema.quant_entradas_sistema++;
+        }
+    }
+
+    printf("Arquivo copiado para a entrada %u.\n", indice_entrada);
+    return 0;
+}
+
+#endif /* LEITURA_ARQUIVOS_H */
