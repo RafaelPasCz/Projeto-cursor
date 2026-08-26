@@ -1,124 +1,163 @@
-// Funções envolvidas no processo de pegar um arquivo, e formatá-lo para nele simular um sistema de arquivos
+/* Funcoes para criar uma nova particao no formato do sistema de arquivos. */
+#ifndef FORMATAR_H
+#define FORMATAR_H
+
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "structs.h"
 
+static void descartar_linha_entrada(void) {
+    int caractere;
 
-void inicializar_secao_dados() {
-    //  Recebe o nome de um arquivo, abre ele
-    //  Obtém o começo, e o tamanho da seção de dados
-    //  A partir do primeiro endereço, percorre a seção de dados, criando a lista de blocos livres
-        // Adiciona um ponteiro de 4 bytes para o próximo bloco, no começo de cada bloco
-    //  Escreve no arquivo, e libera os espaços alocados
-
-    FILE *file;
-    uint32_t inicio_secao = br_sistema.blocos_reservados;   // Obtem o endereço do primeiro bloco da seção de dados
-    uint32_t num_blocos = br_sistema.num_blocos_secao_dados;    // Obtem o tamnho total da seção de dados
-
-    file = fopen(nome_arquivo, "rb+");
-    if (!file) {                                                // Verifica se foi aberto corretamente
-        printf("\n\nArquivo %s", nome_arquivo);
-        perror("Erro ao abrir arquivo");
-        exit(EXIT_FAILURE);
-    }
-
-    for (uint32_t i = 0; i < num_blocos; i++) {
-        uint32_t endereco_atual = inicio_secao + i; // Vai caminhando por cada bloco da seção de dados
-        uint32_t proximo_endereco;                  // Variavel para calcular o proximo endereço
-
-        if (i == num_blocos - 1) {
-            proximo_endereco = 0xFFFFFFFF;          // Se chegamos ao ultimo bloco, proximo = -1
-        } else {
-            proximo_endereco = endereco_atual + 1; //proximo endereço é apenas o atual + 1
-        }
-        //printf("\nProximo endereco: %i", proximo_endereco);
-
-        unsigned char bytes[4]; //fazemos a conversão de um inteiro para 4 bytes
-        bytes[0] = (proximo_endereco >> 0) & 0xFF;
-        bytes[1] = (proximo_endereco >> 8) & 0xFF;
-        bytes[2] = (proximo_endereco >> 16) & 0xFF;
-        bytes[3] = (proximo_endereco >> 24) & 0xFF;
-
-        char *conteudo_bloco = (char*)malloc(br_sistema.bytes_por_bloco);   // Alocamos o conteudo para o bloco
-        if (!conteudo_bloco) {
-            perror("Erro ao alocar memória para o bloco");
-            exit(EXIT_FAILURE);
-        }
-
-        memcpy(conteudo_bloco, bytes, 4);                                   // Os primeiros 4 bytes guardam o proximo endereço
-        memset(conteudo_bloco + 4, 0x00, br_sistema.bytes_por_bloco - 4);   // O restante enchemos de 0
-
-        fseek(file, endereco_atual * br_sistema.bytes_por_bloco, SEEK_SET); // Movemos o cursor, deslocamento atual * tamanho do bloco
-        fwrite(conteudo_bloco, br_sistema.bytes_por_bloco, 1, file);        // Escrevemos o conteudo do bloco
-
-        free(conteudo_bloco);   // Liberamos o ponteiro
-    }
-    fclose(file);               // Fecha o arquivo após a execução
+    do {
+        caractere = getchar();
+    } while (caractere != '\n' && caractere != EOF);
 }
 
+static int ler_inteiro_sem_sinal(const char *mensagem, uint64_t *valor) {
+    unsigned long long entrada;
 
-int formatar(){
-    //  Recebe o nome do arquivo aonde será feita a simulação do sistema de arquivos
-    //  Pede para o usuário o tamanho do disco (simulado), e o número de entradas da tabela de entradas
-    //  Valida os dados inseridos
-    //  Gera a stuct do boot record, calcula e insere os dados na struct
-    //  Salva a struct no arquivo
-    //  Retorna 0 caso tudo der certo
+    printf("%s", mensagem);
+    if (scanf("%llu", &entrada) != 1) {
+        descartar_linha_entrada();
+        return 0;
+    }
+    descartar_linha_entrada();
 
-    int total_blocos_reservados, tamanho_disco, n_entradas, tamanho_total_entradas;
-    int continuar = 1;          // Usado na validação dos inputs
+    *valor = (uint64_t)entrada;
+    return 1;
+}
 
+static void escrever_uint32_little_endian(uint8_t destino[4], uint32_t valor) {
+    destino[0] = (uint8_t)(valor & UINT32_C(0xFF));
+    destino[1] = (uint8_t)((valor >> 8) & UINT32_C(0xFF));
+    destino[2] = (uint8_t)((valor >> 16) & UINT32_C(0xFF));
+    destino[3] = (uint8_t)((valor >> 24) & UINT32_C(0xFF));
+}
 
-    while (continuar){                      // Recebemos e validamos os inputs do usuário
-        printf("\n=--=- Informacoes de Formatacao\n");
-        printf("=-- Insira o tamanho do disco, em bytes\nR: ");
-        scanf("%i",&tamanho_disco);
+/*
+ * Cada bloco livre armazena, nos quatro primeiros bytes, o endereco do proximo
+ * bloco. O ultimo bloco recebe BLOCO_INVALIDO para encerrar a lista ligada.
+ */
+static int escrever_lista_blocos_livres(FILE *arquivo,
+                                        uint32_t primeiro_bloco,
+                                        uint32_t quantidade_blocos) {
+    uint8_t bloco[BLOCK_SIZE];
 
-        printf("=-- Insira o numero de entradas na tabela de entradas\nR: ");
-        scanf("%i",&n_entradas);
+    for (uint32_t indice = 0; indice < quantidade_blocos; indice++) {
+        uint32_t bloco_atual = primeiro_bloco + indice;
+        uint32_t proximo_bloco = (indice + 1u == quantidade_blocos)
+            ? BLOCO_INVALIDO
+            : bloco_atual + 1u;
 
-        // TODO - É 4 se considerarmos o root directory (1 bloco)
-        if (tamanho_disco >= (3 * BLOCK_SIZE)                           // O disco armazena no mínimo 3 blocos (boot_r, tabela, dados)?
-            && n_entradas <= ((int)(tamanho_disco / BLOCK_SIZE)) - 2 ){ // Não pode ter mais entradas do que blocos de dados
-            // Não é necessário verificar se o tamanho da partição é suficiente pra tabela de entradas.
+        memset(bloco, 0, sizeof(bloco));
+        escrever_uint32_little_endian(bloco, proximo_bloco);
 
-            continuar = 0;  // Se os inputs forem válidos, continua a execução
-
-        } else {            // Se não, pede novamente os inputs
-            printf("\n\n=-- DADOS INVALIDOS!!!\n");
+        if (fwrite(bloco, sizeof(bloco), 1, arquivo) != 1) {
+            return 0;
         }
     }
 
-    br_sistema.bytes_por_bloco = BLOCK_SIZE;     // Quantidade fixa de blocos por byte.
-    br_sistema.blocos_reservados = 1;            // Quantidade de blocos reservados: 1 (boot record) (adicionar mais 1? root dir?)
-    br_sistema.quant_entradas_sistema = 0;       // inicia em 0 porque o sistema está vazio
-    br_sistema.num_blocos_diretorio_raiz = 1;     // Numero de blocos reservados para o diretorio raiz
-    br_sistema.num_blocos_totais = tamanho_disco/br_sistema.bytes_por_bloco;  // separamos o disco em blocos
+    return 1;
+}
 
-    tamanho_total_entradas = n_entradas * sizeof(entrada);          // tamanho total da tabela de entradas em bytes
+int formatar(void) {
+    boot_record novo_boot = {0};
+    uint8_t bloco_vazio[BLOCK_SIZE] = {0};
+    uint64_t tamanho_disco_bytes;
+    uint64_t quantidade_entradas;
+    uint64_t total_blocos;
+    uint64_t blocos_tabela;
+    FILE *arquivo;
 
-    if(tamanho_total_entradas < br_sistema.bytes_por_bloco){        // alocamos apenas um bloco se o tamanho da tabela é menor que um bloco
-        br_sistema.num_blocos_tabela_entradas = 1;
-    }else{                                                          // separamos em blocos e arredondamos para cima
-        br_sistema.num_blocos_tabela_entradas = (tamanho_total_entradas + br_sistema.bytes_por_bloco - 1) / br_sistema.bytes_por_bloco;
+    for (;;) {
+        printf("\n=--=- Informacoes de formatacao\n");
+
+        if (!ler_inteiro_sem_sinal("=-- Tamanho do disco, em bytes: ",
+                                   &tamanho_disco_bytes) ||
+            !ler_inteiro_sem_sinal("=-- Numero de entradas: ",
+                                   &quantidade_entradas)) {
+            printf("Entrada invalida. Tente novamente.\n");
+            continue;
+        }
+
+        if (quantidade_entradas > UINT64_MAX - (ENTRADAS_POR_BLOCO - 1u)) {
+            printf("Numero de entradas grande demais.\n");
+            continue;
+        }
+
+        total_blocos = tamanho_disco_bytes / BLOCK_SIZE;
+        blocos_tabela = (quantidade_entradas + ENTRADAS_POR_BLOCO - 1u) /
+                         ENTRADAS_POR_BLOCO;
+
+        if (quantidade_entradas == 0 ||
+            tamanho_disco_bytes % BLOCK_SIZE != 0 ||
+            total_blocos > UINT32_MAX ||
+            blocos_tabela == 0 ||
+            blocos_tabela > UINT32_MAX ||
+            1u + blocos_tabela > UINT16_MAX ||
+            total_blocos < 3u ||
+            1u + blocos_tabela >= total_blocos) {
+            printf("Dados invalidos: e necessario haver boot, tabela e ao menos um bloco de dados.\n");
+            continue;
+        }
+
+        break;
     }
 
-    total_blocos_reservados = br_sistema.blocos_reservados + br_sistema.num_blocos_tabela_entradas;   // para calcular o inicio da seção de dados
-    br_sistema.blocos_reservados = total_blocos_reservados;
-    br_sistema.num_blocos_secao_dados = br_sistema.num_blocos_totais - total_blocos_reservados;
-                                            // numero de blocos totais do sistema - (reservados + tabela de entradas)
-    br_sistema.num_blocos_livres = br_sistema.num_blocos_secao_dados;
+    novo_boot.bytes_por_bloco = BLOCK_SIZE;
+    novo_boot.num_blocos_totais = (uint32_t)total_blocos;
+    novo_boot.num_blocos_tabela_entradas = (uint32_t)blocos_tabela;
+    /* O diretorio raiz e representado pela propria tabela de entradas. */
+    novo_boot.num_blocos_diretorio_raiz = (uint32_t)blocos_tabela;
+    novo_boot.blocos_reservados =
+        1u + novo_boot.num_blocos_tabela_entradas;
+    novo_boot.num_blocos_secao_dados =
+        novo_boot.num_blocos_totais - novo_boot.blocos_reservados;
+    novo_boot.num_blocos_livres = novo_boot.num_blocos_secao_dados;
+    novo_boot.quant_entradas_sistema = 0;
+    novo_boot.cabeca_lista = novo_boot.blocos_reservados;
 
-    br_sistema.cabeca_lista = total_blocos_reservados;       // Obtemos o endereço do primeiro bloco livre
-
-    FILE *file = fopen(nome_arquivo, "wb");             // Abrimos o arquivo
-
-    if (!file) {
-        printf("\n\nErro ao abrir o arquivo %s!\n", nome_arquivo);
+    arquivo = fopen(nome_arquivo, "wb");
+    if (arquivo == NULL) {
+        perror("Erro ao criar a particao simulada");
         return 1;
     }
 
-    fwrite(&br_sistema, sizeof(boot_record), 1, file);
-    fclose(file);
+    memcpy(bloco_vazio, &novo_boot, sizeof(novo_boot));
+    if (fwrite(bloco_vazio, sizeof(bloco_vazio), 1, arquivo) != 1) {
+        perror("Erro ao escrever o boot record");
+        fclose(arquivo);
+        return 1;
+    }
 
+    memset(bloco_vazio, 0, sizeof(bloco_vazio));
+    for (uint32_t indice = 0;
+         indice < novo_boot.num_blocos_tabela_entradas;
+         indice++) {
+        if (fwrite(bloco_vazio, sizeof(bloco_vazio), 1, arquivo) != 1) {
+            perror("Erro ao inicializar a tabela de entradas");
+            fclose(arquivo);
+            return 1;
+        }
+    }
+
+    if (!escrever_lista_blocos_livres(arquivo, novo_boot.cabeca_lista,
+                                      novo_boot.num_blocos_livres)) {
+        perror("Erro ao inicializar a lista de blocos livres");
+        fclose(arquivo);
+        return 1;
+    }
+
+    if (fclose(arquivo) != 0) {
+        perror("Erro ao finalizar a formatacao");
+        return 1;
+    }
+
+    printf("Particao formatada com sucesso: '%s'\n", nome_arquivo);
     return 0;
 }
+
+#endif /* FORMATAR_H */

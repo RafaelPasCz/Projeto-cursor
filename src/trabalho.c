@@ -76,10 +76,14 @@ int main(){
             case 1:
                 get_nomeArquivo();
 
-                formatar();                 // Cria o boot record
-                inicializar_secao_dados();  // Inicializa todos os blocos da seção de dados
-
-                memset(&br_sistema, 0, sizeof(br_sistema));   // Limpa os dados armazenados nas structs
+                if (formatar() == 0) {
+                    /* A particao foi criada no disco; carregue-a para usa-la. */
+                    free(entrada_sistema);
+                    free(dados_sistema);
+                    entrada_sistema = NULL;
+                    dados_sistema = NULL;
+                    memset(&br_sistema, 0, sizeof(br_sistema));
+                }
 
                 break;
 
